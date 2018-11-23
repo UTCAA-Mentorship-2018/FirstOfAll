@@ -6,6 +6,8 @@ Created on Thu Oct 25 09:11:21 2018
 """
 
 import pandas as pd
+import matplotlib.pyplot as plt
+% matplotlib inline
 import math
 
 def Imputing_data(datafile):
@@ -73,6 +75,7 @@ def drop_duplications(data):
         return data_reset
     
     else:
+        print('There are no any duplications in the dataset...')
         return data
 
 # =============================================================================
@@ -102,11 +105,13 @@ def separate_data(data):
     nums = int((stop - start) / Length)         # Defining how many subsets that the observation can be devided
     
     i = 0
+    print('Forming the subsets...')
     while(i < stop):
         for sets in range(int(nums)):
             # Partitioning every 11000 observation as a sub dataset
             SubSets[sets] = pd.DataFrame(data.iloc[i:i+Length])
             i += Length
+            print('The subset ' + str(sets) + ' has been formed with length of ' + str(len(SubSets[sets])))
     
     return SubSets
 
@@ -126,6 +131,7 @@ def dividing_subset_data(SubSet):
     Target_Means_Non_Missing = []               # To save all the TARGET means with Non-Missing observations
     Separated_Data = {}                         # To save the Missing and Non-Missing data for each subset
     
+    print('Separating each subset into Missing and Non-Missing...\n')
     for sets in range(Length):
         length = len(SubSet[sets])
         # Defining dictionaries in each subset to separate data into Missing and Non-Missing
@@ -142,11 +148,13 @@ def dividing_subset_data(SubSet):
         Missing = pd.DataFrame(Miss)
         Missing_Means = Missing['TARGET'].mean()
         Target_Means_Missing.append(Missing_Means)
+        print('The TARGET Means of subset ' + str(sets) + ' with Missing observations is ' + str(Missing_Means))
         
         # Saving TARGET mean with Non-Missing observations to a new array
         NonMissing = pd.DataFrame(NonMiss)
         NonMissing_Means = NonMissing['TARGET'].mean()
         Target_Means_Non_Missing.append(NonMissing_Means)
+        print('The TARGET Means of subset ' + str(sets) + ' with Non-Missing observations is ' + str(NonMissing_Means))
             
     return Target_Means_Missing, Target_Means_Non_Missing, Separated_Data
 
@@ -166,11 +174,23 @@ def getting_indexes(Target_Miss, Target_NonMiss):
     
     # Concatinating the TARGET means with and without Missing observations and rounding up to 4 decimal digits
     Target_Means_Table = pd.concat([TM, TNM], axis = 1)
-    Target_Means_Val = Target_Means_Table.round(4)
+    Target_Means_Table_Renames = Target_Means_Table.rename(columns = {0: 'TARGET Means with Missing', 1: 'TARGET Means with Non-Missing'})
+    Target_Means_Table_Renames = Target_Means_Table_Renames.round(4)
+    TABLES = pd.DataFrame(Target_Means_Table_Renames)
+    print('There are {} subsets of TARGET Means'.format(Target_Means_Table_Renames.shape[0]) + '\n')
+    print(TABLES)
     
     # Separating the columns of the TARGET means table
-    Target_Missing = Target_Means_Val[0]
-    Target_NonMissing = Target_Means_Val[1]
+    Target_Missing = Target_Means_Table_Renames['TARGET Means with Missing']
+    Target_NonMissing = Target_Means_Table_Renames['TARGET Means with Non-Missing']
+    
+    # Scatter plotting the distribution of TARGET means for Missing and Non-Missing
+    plt.figure()
+    plt.plot(Target_Missing, 'bo')
+    plt.plot(Target_NonMissing, 'r*')
+    plt.title('Distributions of TARGET Means')
+    plt.xlabel('subset indexes')
+    plt.ylabel('TARGET Means')
     
     # Catching the TARGET means with Non-Missing observations greater than 0.07
     Sub_Target_NonMissing = Target_NonMissing[Target_NonMissing > 0.07]
@@ -215,6 +235,8 @@ def mapping_index(Miss_Index, NonMiss_Index, Missing_Val, Sub_NonMissing_Val):
         # Obtaining the indexes from the TARGET means Table
         Mapping_Index = NonMiss_Index[Indexes]
     
+    print('The indexes of minimum differences occurring in the TARGET means with Non-Missing observations are: ')
+    print(Indexes, '\n')
     return Mapping_Index
 
 def data_imputation(Miss_Index, NonMiss_Index, Separated_Data):
@@ -232,40 +254,49 @@ def data_imputation(Miss_Index, NonMiss_Index, Separated_Data):
         5. Updating the dataset with the new fill in data
     '''
 # =============================================================================
-    for i in Miss_Index:
-        for j in NonMiss_Index:
+    i = 0
+    j = 0
+    MissLength = len(Miss_Index)
+    NonMissLength = len(NonMiss_Index)
+    
+    while((i < MissLength) and (j < NonMissLength)):
             
-            # Separating the Missing and Non-Missing observations according to the mapping_index function
-            Separated_Missing = Separated_Data[i]['Missing']
-            Separated_NonMissing = Separated_Data[j]['Non-Missing']
+        # Separating the Missing and Non-Missing observations according to the mapping_index function
+        Separated_Missing = Separated_Data[i]['Missing']
+        Separated_NonMissing = Separated_Data[j]['Non-Missing']
             
-            Miss_Part = pd.DataFrame(Separated_Missing)
-            NonMiss_Part = pd.DataFrame(Separated_NonMissing)
-            Columns = Miss_Part.columns.values
-            Length = len(Columns)
+        Miss_Part = pd.DataFrame(Separated_Missing)
+        NonMiss_Part = pd.DataFrame(Separated_NonMissing)
+        Columns = Miss_Part.columns.values
+        Length = len(Columns)
 
-            for item in range(Length):
+        for item in range(Length):
                 
-                # Obtaining the column variables
-                MC = Columns[item]
+            # Obtaining the column variables
+            MC = Columns[item]
                 
-                # Imputing the missing categorical data with the most frequent values in the columns of corresponding Non-Missing observations
-                if Miss_Part[MC].dtypes == 'object':
-                    MostFrequent = NonMiss_Part[MC].value_counts().index[0]
-                    Miss_Part[MC] = Miss_Part[MC].fillna(MostFrequent)
+            # Imputing the missing categorical data with the most frequent values in the columns of corresponding Non-Missing observations
+            if Miss_Part[MC].dtypes == 'object':
+                MostFrequent = NonMiss_Part[MC].value_counts().index[0]
+                Miss_Part[MC] = Miss_Part[MC].fillna(MostFrequent)
                 
-                # Imputing the missing data with the median values in the columns of corresponding Non-Missing observations where the length of distinctive values are less than 50 and the column data types are 'int64' or 'float64'
-                elif (len(Miss_Part[MC].value_counts()) <= 50) and ((Miss_Part[MC].dtypes == 'float64') or (Miss_Part[MC].dtypes == 'int64')):
-                    Median = NonMiss_Part[MC].median()
-                    Miss_Part[MC] = Miss_Part[MC].fillna(Median)
+            # Imputing the missing data with the median values in the columns of corresponding Non-Missing observations where the length of distinctive values are less than 50 and the column data types are 'int64' or 'float64'
+            elif (len(Miss_Part[MC].value_counts()) <= 50) and ((Miss_Part[MC].dtypes == 'float64') or (Miss_Part[MC].dtypes == 'int64')):
+                Median = NonMiss_Part[MC].median()
+                Miss_Part[MC] = Miss_Part[MC].fillna(Median)
                 
-                # Imputing other missing data with the mean values in the columns of corresponding Non-Missing observations
-                else:
-                    mean = NonMiss_Part[MC].mean()
-                    Miss_Part[MC] = Miss_Part[MC].fillna(mean)
+            # Imputing other missing data with the mean values in the columns of corresponding Non-Missing observations
+            else:
+                mean = NonMiss_Part[MC].mean()
+                Miss_Part[MC] = Miss_Part[MC].fillna(mean)
+                
+        print('The Missing of separated dataset ' + str(Miss_Index[i]) + ' has been imputed with the Non-Missing of separated dataset ' + str(NonMiss_Index[j]))
             
-            # Updating the observations in the separated datasets
-            Separated_Data[i]['Missing'] = Miss_Part
-            Separated_Data[j]['Non-Missing'] = NonMiss_Part
+        # Updating the observations in the separated datasets
+        Separated_Data[i]['Missing'] = Miss_Part
+        Separated_Data[j]['Non-Missing'] = NonMiss_Part
+        
+        i += 1
+        j += 1
     
     return Separated_Data
